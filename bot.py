@@ -19,7 +19,12 @@ async def close_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     await context.bot.set_chat_permissions(
         chat_id=chat_id,
-        permissions=ChatPermissions(can_send_messages=False)
+        permissions=ChatPermissions(
+            can_send_messages=False,
+            can_send_media_messages=False,
+            can_send_polls=False,
+            can_add_web_page_previews=False
+        )
     )
 
 
@@ -28,7 +33,12 @@ async def open_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     await context.bot.set_chat_permissions(
         chat_id=chat_id,
-        permissions=ChatPermissions(can_send_messages=True)
+        permissions=ChatPermissions(
+            can_send_messages=True,
+            can_send_media_messages=True,
+            can_send_polls=True,
+            can_add_web_page_previews=True
+        )
     )
 
 
@@ -51,7 +61,7 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             job_queue.run_daily(
                 close_group,
                 time=time(hour=hour, minute=minute),
-                days=(0,1,2,3,4,5,6),
+                days=(0, 1, 2, 3, 4, 5, 6),
                 data=chat_id,
                 name=str(chat_id)
             )
@@ -60,7 +70,7 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             job_queue.run_daily(
                 open_group,
                 time=time(hour=hour, minute=minute),
-                days=(0,1,2,3,4,5,6),
+                days=(0, 1, 2, 3, 4, 5, 6),
                 data=chat_id,
                 name=str(chat_id)
             )
@@ -76,11 +86,47 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(str(e))
 
 
+# ---------------- CLOSE NOW (NEW) ----------------
+async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    await context.bot.set_chat_permissions(
+        chat_id=chat_id,
+        permissions=ChatPermissions(
+            can_send_messages=False,
+            can_send_media_messages=False,
+            can_send_polls=False,
+            can_add_web_page_previews=False
+        )
+    )
+
+    await update.message.reply_text("🔒 تم قفل الجروب فورًا")
+
+
+# ---------------- OPEN NOW (NEW) ----------------
+async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    await context.bot.set_chat_permissions(
+        chat_id=chat_id,
+        permissions=ChatPermissions(
+            can_send_messages=True,
+            can_send_media_messages=True,
+            can_send_polls=True,
+            can_add_web_page_previews=True
+        )
+    )
+
+    await update.message.reply_text("🔓 تم فتح الجروب فورًا")
+
+
 # ---------------- MAIN ----------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("addtime", addtime))
+    app.add_handler(CommandHandler("close_now", close_now))
+    app.add_handler(CommandHandler("open_now", open_now))
 
     app.run_polling()
 
