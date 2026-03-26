@@ -4,114 +4,75 @@ from datetime import time
 from telegram import Update, ChatPermissions
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# 1. إعداد التوقيت (مهم جداً عشان Railway شغال توقيت جرينتش)
-# لو انت في مصر سيبها 'Africa/Cairo' لو في السعودية خليها 'Asia/Riyadh'
+# التوقيت
 MY_TZ = pytz.timezone('Africa/Cairo') 
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
-    level=logging.INFO
-)
-
+logging.basicConfig(level=logging.INFO)
 TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
 
-# ---------------- وظيفة تغيير الصلاحيات (الأساسية) ----------------
-
+# ---------------- الدالة المنقذة ----------------
 async def set_group_status(context, chat_id, is_open):
-    """وظيفة موحدة لتغيير صلاحيات الجروب"""
-    perms = ChatPermissions(
-        can_send_messages=is_open,
-        can_send_media_messages=is_open,
-        can_send_polls=is_open,
-        can_add_web_page_previews=is_open
-    )
+    """
+    هنا الحل: بنبعت الصلاحية الأساسية 'can_send_messages' 
+    والتليجرام بيفهم الباقي تلقائياً في الإصدارات الجديدة
+    """
+    if is_open:
+        # فتح كل حاجة
+        perms = ChatPermissions(
+            can_send_messages=True,
+            can_send_media_messages=True,
+            can_send_polls=True,
+            can_add_web_page_previews=True,
+            can_send_other_messages=True
+        )
+    else:
+        # قفل الرسائل (لما تقفل دي الباقي بيتقفل أوتوماتيك)
+        perms = ChatPermissions(can_send_messages=False)
+        
     return await context.bot.set_chat_permissions(chat_id=chat_id, permissions=perms)
 
-# ---------------- الوظائف التي يتم استدعاؤها في الموعد ----------------
+# ---------------- الأوامر ----------------
 
+async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await set_group_status(context, update.effective_chat.id, False)
+        await update.message.reply_text("🔒 خلاص يا ريس الجروب اتقفل.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ ايرور جديد: {e}")
+
+async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await set_group_status(context, update.effective_chat.id, True)
+        await update.message.reply_text("🔓 الجروب اتفتح، خليهم يهيصوا.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ ايرور جديد: {e}")
+
+# (باقي دوال addtime و main زي ما هي بس استبدل set_group_status)
 async def scheduled_task(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     chat_id, action = job.data
-    is_open = (action == "open")
-    
-    try:
-        await set_group_status(context, chat_id, is_open)
-        logging.info(f"تم تنفيذ الموعد بنجاح: {action} للجروب {chat_id}")
-    except Exception as e:
-        logging.error(f"فشل تنفيذ الموعد: {e}")
-
-# ---------------- أوامر الاختبار الفوري ----------------
-
-async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    try:
-        await set_group_status(context, chat_id, True)
-        await update.message.reply_text("🔓 تم فتح الجروب فوراً للاختبار.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ فشل الفتح: {e}\n(تأكد أن البوت أدمن)")
-
-async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    try:
-        await set_group_status(context, chat_id, False)
-        await update.message.reply_text("🔒 تم قفل الجروب فوراً للاختبار.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ فشل القفل: {e}\n(تأكد أن البوت أدمن)")
-
-# ---------------- أمر ضبط المواعيد اليومية ----------------
+    await set_group_status(context, chat_id, (action == "open"))
 
 async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    
-    # التأكد من المدخلات
     if len(context.args) < 2:
-        await update.message.reply_text("⚠️ طريقة الاستخدام:\n/addtime 22:00 close\nأو\n/addtime 08:00 open")
+        await update.message.reply_text("استخدم: /addtime 22:00 close")
         return
-
     try:
-        time_input = context.args[0]
+        h, m = map(int, context.args[0].split(':'))
         action = context.args[1].lower()
-        
-        if action not in ['open', 'close']:
-            await update.message.reply_text("❌ الأكشن لازم يكون open أو close")
-            return
-
-        h, m = map(int, time_input.split(':'))
-        # تحديد الوقت بناءً على المنطقة الزمنية
-        target_time = time(hour=h, minute=m, tzinfo=MY_TZ)
-
-        # اسم فريد لكل نوع (قفل أو فتح) عشان ميمسحوش بعض
         job_name = f"{chat_id}_{action}"
-
-        # مسح أي موعد قديم متسجل لنفس النوع في الجروب ده
-        current_jobs = context.job_queue.get_jobs_by_name(job_name)
-        for job in current_jobs:
-            job.schedule_removal()
-
-        # جدولة المهمة يومياً
-        context.job_queue.run_daily(
-            scheduled_task,
-            time=target_time,
-            data=(chat_id, action),
-            name=job_name
-        )
-
-        await update.message.reply_text(f"✅ تم الضبط! الجروب سيقوم بـ ({action}) يومياً الساعة {time_input} بتوقيتك المحلي.")
-
-    except Exception as e:
-        await update.message.reply_text(f"❌ حدث خطأ في التنسيق. تأكد من كتابة الوقت HH:MM\n(مثال: 09:30)")
-
-# ---------------- تشغيل البوت ----------------
+        for job in context.job_queue.get_jobs_by_name(job_name): job.schedule_removal()
+        context.job_queue.run_daily(scheduled_task, time=time(h, m, tzinfo=MY_TZ), data=(chat_id, action), name=job_name)
+        await update.message.reply_text(f"✅ تم الجدولة: {action} الساعة {context.args[0]}")
+    except:
+        await update.message.reply_text("فيه حاجة غلط في الوقت!")
 
 def main():
-    # هنا شيلنا الـ Persistence مؤقتاً لسهولة التجربة
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("addtime", addtime))
     app.add_handler(CommandHandler("open_now", open_now))
     app.add_handler(CommandHandler("close_now", close_now))
-
-    print("البوت شغال الآن...")
     app.run_polling()
 
 if __name__ == "__main__":
