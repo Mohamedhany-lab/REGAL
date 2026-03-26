@@ -10,7 +10,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-TOKEN = "PUT_YOUR_TOKEN_HERE"
+TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
 
 # ---------------- TIMEZONE ----------------
 egypt_tz = timezone("Africa/Cairo")
