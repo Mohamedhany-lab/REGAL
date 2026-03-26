@@ -36,12 +36,18 @@ async def open_group(context: ContextTypes.DEFAULT_TYPE):
 async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
+
+        # 🟡 مهم جدًا: منع الكراش
+        if len(context.args) < 2:
+            await update.message.reply_text("اكتب كده: /addtime 08:00 close")
+            return
+
         time_str = context.args[0]
         action = context.args[1].lower()
 
         hour, minute = map(int, time_str.split(":"))
 
-        job_queue = context.application.job_queue
+        job_queue = context.job_queue
 
         if action == "close":
             job_queue.run_daily(
@@ -60,8 +66,7 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("اكتب كده: /addtime 08:00 close")
-
+        await update.message.reply_text("حصل خطأ — اكتب: /addtime 08:00 close")
 app = ApplicationBuilder().token(TOKEN).job_queue(None).build()
 
 app.add_handler(CommandHandler("start", start))
