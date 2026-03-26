@@ -1,5 +1,6 @@
 from telegram import Update, ChatPermissions
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from datetime import time
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -7,6 +8,13 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
 
 
+# ---------------- REMOVE OLD JOBS ----------------
+def remove_jobs(job_queue, name):
+    for job in job_queue.get_jobs_by_name(name):
+        job.schedule_removal()
+
+
+# ---------------- CLOSE GROUP ----------------
 async def close_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     await context.bot.set_chat_permissions(
@@ -15,6 +23,7 @@ async def close_group(context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ---------------- OPEN GROUP ----------------
 async def open_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     await context.bot.set_chat_permissions(
@@ -23,18 +32,14 @@ async def open_group(context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-def remove_jobs(job_queue, name):
-    for job in job_queue.get_jobs_by_name(name):
-        job.schedule_removal()
-
-
+# ---------------- ADD TIME COMMAND ----------------
 async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
         job_queue = context.job_queue
 
         if len(context.args) < 2:
-            await update.message.reply_text("Use /addtime HH:MM close/open")
+            await update.message.reply_text("Use: /addtime HH:MM close/open")
             return
 
         hour, minute = map(int, context.args[0].split(":"))
@@ -45,7 +50,7 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if action == "close":
             job_queue.run_daily(
                 close_group,
-                time=(hour, minute),
+                time=time(hour=hour, minute=minute),
                 days=(0,1,2,3,4,5,6),
                 data=chat_id,
                 name=str(chat_id)
@@ -54,7 +59,7 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif action == "open":
             job_queue.run_daily(
                 open_group,
-                time=(hour, minute),
+                time=time(hour=hour, minute=minute),
                 days=(0,1,2,3,4,5,6),
                 data=chat_id,
                 name=str(chat_id)
@@ -64,13 +69,14 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("use open or close")
             return
 
-        await update.message.reply_text("✔️ تم الضبط يوميًا بنجاح")
+        await update.message.reply_text("✔️ تم الضبط بنجاح")
 
     except Exception as e:
-        logging.error(e)
-        await update.message.reply_text("error in command")
+        logging.exception(e)
+        await update.message.reply_text(str(e))
 
 
+# ---------------- MAIN ----------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
