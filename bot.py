@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, ChatPermissions
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import datetime
 import logging
@@ -18,39 +18,48 @@ async def close_group(context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.set_chat_permissions(
             chat_id=chat_id,
-            permissions={"can_send_messages": False}
+            permissions=ChatPermissions(can_send_messages=False)
         )
-    except:
-        pass
+    except Exception as e:
+        logging.error(e)
 
 async def open_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     try:
         await context.bot.set_chat_permissions(
             chat_id=chat_id,
-            permissions={"can_send_messages": True}
+            permissions=ChatPermissions(can_send_messages=True)
         )
-    except:
-        pass
+    except Exception as e:
+        logging.error(e)
 
 async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
         time_str = context.args[0]
-        action = context.args[1]
+        action = context.args[1].lower()
 
         hour, minute = map(int, time_str.split(":"))
 
         job_queue = context.application.job_queue
 
         if action == "close":
-            job_queue.run_daily(close_group, time=datetime.time(hour, minute), data=chat_id)
+            job_queue.run_daily(
+                close_group,
+                time=datetime.time(hour, minute),
+                data=chat_id
+            )
         else:
-            job_queue.run_daily(open_group, time=datetime.time(hour, minute), data=chat_id)
+            job_queue.run_daily(
+                open_group,
+                time=datetime.time(hour, minute),
+                data=chat_id
+            )
 
         await update.message.reply_text("تم الإضافة ✅")
 
-    except:
+    except Exception as e:
+        logging.error(e)
         await update.message.reply_text("اكتب كده: /addtime 08:00 close")
 
 app = ApplicationBuilder().token(TOKEN).build()
