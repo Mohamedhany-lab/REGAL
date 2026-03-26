@@ -24,9 +24,9 @@ async def set_group_status(context, chat_id, is_open):
             can_send_photos=True,           # الصور
             can_send_videos=True,           # الفيديوهات
             can_send_documents=True,        # الملفات (PDF, الخ)
-            can_send_other_messages=True,   # الاستيكرز والـ GIF
-            can_add_web_page_previews=True, # لينكات المواقع
-            can_send_polls=True,            # التصويتات
+            can_send_other_messages=False,   # الاستيكرز والـ GIF
+            can_add_web_page_previews=False, # لينكات المواقع
+            can_send_polls=False,            # التصويتات
             # تم تعطيل الريكوردات والأغاني بناءً على طلبك:
             can_send_voice_notes=False,     # الريكوردات (ممنوع)
             can_send_audios=False           # الملفات الصوتية/الأغاني (ممنوع)
