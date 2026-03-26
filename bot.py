@@ -1,8 +1,8 @@
 from telegram import Update, ChatPermissions
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-import datetime
+from datetime import datetime, time as dtime
+import pytz
 import logging
-from pytz import timezone
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -10,27 +10,14 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
+# ---------------- TOKEN ----------------
+TOKEN = "PUT_YOUR_TOKEN_HERE"
 
 # ---------------- TIMEZONE ----------------
-egypt_tz = timezone("Africa/Cairo")
+egypt_tz = pytz.timezone("Africa/Cairo")
 
-# ---------------- UTIL ----------------
-def egypt_to_utc(hour, minute):
-    """
-    تحويل وقت مصر → UTC بشكل آمن 100%
-    """
-    now = datetime.datetime.utcnow()
 
-    naive_dt = datetime.datetime(now.year, now.month, now.day, hour, minute)
-
-    local_dt = egypt_tz.localize(naive_dt, is_dst=None)
-
-    utc_dt = local_dt.astimezone(timezone("UTC"))
-
-    return utc_dt.time()
-
-# ---------------- ACTIONS ----------------
+# ---------------- GROUP ACTIONS ----------------
 async def close_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     try:
@@ -41,6 +28,7 @@ async def close_group(context: ContextTypes.DEFAULT_TYPE):
         logging.info(f"Closed group {chat_id}")
     except Exception as e:
         logging.error(e)
+
 
 async def open_group(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
@@ -53,19 +41,22 @@ async def open_group(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.error(e)
 
-# ---------------- CLEAN DUPLICATES ----------------
-def remove_existing_jobs(job_queue, chat_id):
-    current_jobs = job_queue.get_jobs_by_name(str(chat_id))
-    for job in current_jobs:
-        job.schedule_removal()
 
-# ---------------- ADD TIME ----------------
+# ---------------- CLEAN OLD JOBS ----------------
+def remove_jobs(job_queue, name):
+    jobs = job_queue.get_jobs_by_name(name)
+    for j in jobs:
+        j.schedule_removal()
+
+
+# ---------------- ADD TIME COMMAND ----------------
 async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
+        job_queue = context.job_queue
 
         if len(context.args) < 2:
-            await update.message.reply_text("استخدم: /addtime 08:00 close")
+            await update.message.reply_text("Usage: /addtime HH:MM close/open")
             return
 
         time_str = context.args[0]
@@ -73,31 +64,36 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         hour, minute = map(int, time_str.split(":"))
 
-        job_queue = context.job_queue
+        now = datetime.now(egypt_tz)
 
-        # 🟢 مهم: منع التكرار
-        remove_existing_jobs(job_queue, chat_id)
+        target_dt = egypt_tz.localize(
+            datetime(now.year, now.month, now.day, hour, minute)
+        )
 
-        target_time = egypt_to_utc(hour, minute)
+        # لو الوقت عدّى، خليه بكرة
+        if target_dt < now:
+            target_dt = target_dt.replace(day=now.day + 1)
+
+        remove_jobs(job_queue, str(chat_id))
 
         if action == "close":
-            job_queue.run_daily(
+            job_queue.run_once(
                 close_group,
-                time=target_time,
+                when=target_dt,
                 data=chat_id,
                 name=str(chat_id)
             )
 
         elif action == "open":
-            job_queue.run_daily(
+            job_queue.run_once(
                 open_group,
-                time=target_time,
+                when=target_dt,
                 data=chat_id,
                 name=str(chat_id)
             )
 
         else:
-            await update.message.reply_text("اكتب open أو close فقط")
+            await update.message.reply_text("Use open or close only")
             return
 
         await update.message.reply_text("✔️ تم الضبط بتوقيت مصر بنجاح")
@@ -106,9 +102,11 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(e)
         await update.message.reply_text("حصل خطأ — راجع الأمر")
 
+
 # ---------------- START ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("البوت شغال 👌")
+    await update.message.reply_text("Bot is running 👌")
+
 
 # ---------------- MAIN ----------------
 def main():
@@ -119,6 +117,7 @@ def main():
 
     logging.info("Bot started...")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
