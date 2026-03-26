@@ -62,7 +62,7 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(e)
         await update.message.reply_text("اكتب كده: /addtime 08:00 close")
 
-app = ApplicationBuilder().token(TOKEN).build()
+app = ApplicationBuilder().token(TOKEN).job_queue(None).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("addtime", addtime))
