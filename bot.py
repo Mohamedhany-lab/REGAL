@@ -1,113 +1,101 @@
 import logging
 import pytz
-from datetime import time
+from datetime import datetime, time
 from telegram import Update, ChatPermissions
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# 1. إعدادات التوقيت (مصر)
+# 1. إعدادات التوقيت الصارمة (مصر)
 MY_TZ = pytz.timezone('Africa/Cairo')
+
+# 2. قائمة الـ IDs المصححة (إضافة -100 لكل رقم بعته)
+GROUP_IDS = [
+    -1003870414631, -1003868568456, -1003843038200, -1003842260078,
+    -1003773422592, -1003309198838, -1003544491812, -1003715228581,
+    -1003304815564, -1003835237780, -1003851844806, -1003863374316
+]
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
-TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8" # حط التوكن بتاعك هنا
+TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
 
-# ---------------- وظيفة التحكم في الصلاحيات ----------------
+# ---------------- وظيفة تنفيذ الأوامر ----------------
 
 async def set_group_status(context, chat_id, is_open):
     if is_open:
-        # فتح الصلاحيات 
         perms = ChatPermissions(
-            can_send_messages=True,         # الرسايل النصية
-            can_send_photos=True,           # الصور
-            can_send_videos=True,      # الفيديوهات العادية
-            can_send_video_notes=True,  # رسائل الفيديو (الكاميرا الفورية)
-            can_send_documents=True,        # الملفات (PDF, الخ)
-            can_send_other_messages=False,   # الاستيكرز والـ GIF
-            can_add_web_page_previews=False, # لينكات المواقع
-            can_send_polls=False,            # التصويتات
-            # تم تعطيل الريكوردات والأغاني بناءً على طلبك:
-            can_send_voice_notes=False,     # الريكوردات (ممنوع)
-            can_send_audios=False           # الملفات الصوتية/الأغاني (ممنوع)
+            can_send_messages=True,         # نص
+            can_send_photos=True,           # صور
+            can_send_videos=True,           # فيديو
+            can_send_video_notes=True,      # نوت فيديو (كاميرا فورية)
+            can_send_documents=True,        # ملفات
+            can_send_other_messages=False,  # استيكرز و GIF (ممنوع)
+            can_add_web_page_previews=False,# لينكات (ممنوع)
+            can_send_polls=False,           # تصويت (ممنوع)
+            can_send_voice_notes=False,     # ريكوردات (ممنوع)
+            can_send_audios=False           # ملفات صوتية (ممنوع)
         )
     else:
-        # قفل إرسال كل شيء
         perms = ChatPermissions(can_send_messages=False)
     
-    return await context.bot.set_chat_permissions(chat_id=chat_id, permissions=perms)
+    try:
+        await context.bot.set_chat_permissions(chat_id=chat_id, permissions=perms)
+    except Exception as e:
+        logging.error(f"❌ فشل في تنفيذ الصلاحيات للجروب {chat_id}: {e}")
 
-# ---------------- الوظيفة المجدولة ----------------
+# ---------------- المحرك الذكي للجدولة ----------------
 
 async def scheduled_task(context: ContextTypes.DEFAULT_TYPE):
+    # فحص اليوم الحالي في مصر
+    now_in_egypt = datetime.now(MY_TZ)
+    current_day = now_in_egypt.weekday() # 1=Tuesday, 4=Friday
+    
+    if current_day in [1, 4]:
+        logging.info("⏸️ اليوم إجازة رسمية (الثلاثاء أو الجمعة). البوت في وضع السكون.")
+        return
+
     chat_id, action = context.job.data
-    is_open = (action == "open")
-    await set_group_status(context, chat_id, is_open)
-    logging.info(f"تم تنفيذ العملية: {action} للجروب {chat_id}")
+    await set_group_status(context, chat_id, (action == "open"))
+    logging.info(f"✅ تم تنفيذ {action} للجروب {chat_id} بنجاح.")
 
-# ---------------- أوامر الاختبار الفوري ----------------
-
-async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await set_group_status(context, update.effective_chat.id, False)
-        await update.message.reply_text("🔒 تم قفل الجروب فوراً.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ خطأ: {e}")
+# ---------------- الأوامر اليدوية (للطوارئ) ----------------
 
 async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await set_group_status(context, update.effective_chat.id, True)
-        await update.message.reply_text("🔓 تم فتح الجروب (الريكوردات ممنوعة).")
-    except Exception as e:
-        await update.message.reply_text(f"❌ خطأ: {e}")
+    await set_group_status(context, update.effective_chat.id, True)
+    await update.message.reply_text("🔓 تم فتح الجروب (النظام العسكري مفعل).")
 
-# ---------------- أمر جدولة الوقت ----------------
+async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_group_status(context, update.effective_chat.id, False)
+    await update.message.reply_text("🔒 تم قفل الجروب فوراً.")
 
-async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.job_queue:
-        await update.message.reply_text("❌ خطأ: الجدولة غير مفعلة. تأكد من [job-queue] في الـ requirements.")
-        return
-
-    if len(context.args) < 2:
-        await update.message.reply_text("⚠️ المثال: /addtime 22:00 close")
-        return
-
-    try:
-        time_input = context.args[0]
-        action = context.args[1].lower()
-        
-        h, m = map(int, time_input.split(':'))
-        target_time = time(hour=h, minute=m, tzinfo=MY_TZ)
-
-        job_name = f"{update.effective_chat.id}_{action}"
-
-        # مسح القديم
-        for job in context.job_queue.get_jobs_by_name(job_name):
-            job.schedule_removal()
-
-        # الجدولة اليومية
-        context.job_queue.run_daily(
-            scheduled_task,
-            time=target_time,
-            data=(update.effective_chat.id, action),
-            name=job_name
-        )
-        await update.message.reply_text(f"✅ تم الجدولة: {action} الساعة {time_input} بتوقيت مصر.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ خطأ: {e}")
-
-# ---------------- تشغيل البوت ----------------
+# ---------------- تشغيل وإدارة البوت ----------------
 
 def main():
-    # بناء البوت مع تفعيل JobQueue تلقائياً
+    # بناء البوت مع دعم الـ JobQueue
     app = ApplicationBuilder().token(TOKEN).build()
+    jq = app.job_queue
 
-    app.add_handler(CommandHandler("addtime", addtime))
+    # برمجة "المسامير" (الجدولة اليومية لكل الجروبات)
+    for gid in GROUP_IDS:
+        # الفترة 1: 08:00 ص - 08:15 ص
+        jq.run_daily(scheduled_task, time=time(8, 0, tzinfo=MY_TZ), data=(gid, "open"))
+        jq.run_daily(scheduled_task, time=time(8, 15, tzinfo=MY_TZ), data=(gid, "close"))
+        
+        # الفترة 2: 08:45 ص - 09:00 ص
+        jq.run_daily(scheduled_task, time=time(8, 45, tzinfo=MY_TZ), data=(gid, "open"))
+        jq.run_daily(scheduled_task, time=time(9, 0, tzinfo=MY_TZ), data=(gid, "close"))
+        
+        # الفترة 3: 09:00 م - 10:00 م (21:00 - 22:00)
+        jq.run_daily(scheduled_task, time=time(21, 0, tzinfo=MY_TZ), data=(gid, "open"))
+        jq.run_daily(scheduled_task, time=time(22, 0, tzinfo=MY_TZ), data=(gid, "close"))
+
+    # تسجيل الأوامر
     app.add_handler(CommandHandler("open_now", open_now))
     app.add_handler(CommandHandler("close_now", close_now))
 
-    print("البوت يعمل والجدولة مفعلة (توقيت القاهرة)...")
+    print("🚀 البوت انطلق.. نظام الـ 12 جروب تحت السيطرة.")
     app.run_polling()
 
 if __name__ == "__main__":
