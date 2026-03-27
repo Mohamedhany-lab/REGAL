@@ -43,14 +43,12 @@ async def set_group_status(context, chat_id, is_open):
 # ---------------- المحركات المجدولة ----------------
 
 async def fixed_scheduled_task(context: ContextTypes.DEFAULT_TYPE):
-    """للمواعيد الثابتة: تحترم إجازة الثلاثاء والجمعة"""
     now_in_egypt = datetime.now(MY_TZ)
-    if now_in_egypt.weekday() in [1, 4]: return # 1=Tue, 4=Fri
+    if now_in_egypt.weekday() in [1, 4]: return 
     chat_id, action = context.job.data
     await set_group_status(context, chat_id, (action == "open"))
 
 async def extra_scheduled_task(context: ContextTypes.DEFAULT_TYPE):
-    """للأوامر الإضافية: تعمل دوماً حتى في الإجازات"""
     chat_id, action = context.job.data
     await set_group_status(context, chat_id, (action == "open"))
 
@@ -69,6 +67,46 @@ async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         t_open = now.replace(hour=h1, minute=m1, second=0, microsecond=0)
         t_close = now.replace(hour=h2, minute=m2, second=0, microsecond=0)
 
-        # تحصين الفتح الفوري لو الميعاد "دلوقتي"
+        # لو الميعاد "دلوقتي" أو فات، افتح فوراً
         if abs((now - t_open).total_seconds()) <= 60 or t_open < now:
-            await set_group_status(context, update.effective_chat
+            await set_group_status(context, update.effective_chat.id, True)
+            msg = f"🔓 تم الفتح فوراً (الموعد حان)\n🔒 سيقفل الساعة: {context.args[1]}"
+        else:
+            context.job_queue.run_once(extra_scheduled_task, when=t_open.time(), data=(update.effective_chat.id, "open"))
+            msg = f"✅ تم الجدولة:\n🔓 فتح: {context.args[0]}\n🔒 قفل: {context.args[1]}"
+
+        context.job_queue.run_once(extra_scheduled_task, when=t_close.time(), data=(update.effective_chat.id, "close"))
+        await update.message.reply_text(msg)
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في الصيغة: {e}")
+
+async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update): return
+    await set_group_status(context, update.effective_chat.id, True)
+    await update.message.reply_text("🔓 تم الفتح فوراً.")
+
+async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update): return
+    await set_group_status(context, update.effective_chat.id, False)
+    await update.message.reply_text("🔒 تم القفل فوراً.")
+
+# ---------------- تشغيل وإدارة البوت ----------------
+
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    jq = app.job_queue
+
+    # برمجة المواعيد الثابتة
+    for gid in GROUP_IDS:
+        for t, act in [((8,0), "open"), ((8,15), "close"), ((8,45), "open"), ((9,0), "close"), ((21,0), "open"), ((22,0), "close")]:
+            jq.run_daily(fixed_scheduled_task, time=time(hour=t[0], minute=t[1], tzinfo=MY_TZ), data=(gid, act))
+
+    app.add_handler(CommandHandler("open_now", open_now))
+    app.add_handler(CommandHandler("close_now", close_now))
+    app.add_handler(CommandHandler("addtime", addtime))
+
+    print("🚀 البوت يعمل بكامل طاقته الآن.")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
