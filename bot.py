@@ -31,10 +31,10 @@ async def apply_status(bot, chat_id, action):
             can_send_other_messages=False, can_add_web_page_previews=False,
             can_send_polls=False, can_send_voice_notes=False, can_send_audios=False
         )
-        alert_msg = "تنبيه عسكري 🪖:\n\"الجروبات مفتوحة الان\""
+        alert_msg = "تنبيه عسكري 🪖:\n\"🫡الجروب مفتوح الآن\""
     else:
         perms = ChatPermissions(can_send_messages=False)
-        alert_msg = "تنبيه عسكري 🪖:\n\"الجروبات مقفولة تماماً الآن\""
+        alert_msg = "تنبيه عسكري 🪖:\n\"🫡تم قفل الجروب تماماً\""
     
     try:
         await bot.set_chat_permissions(chat_id=int(chat_id), permissions=perms)
