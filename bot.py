@@ -7,12 +7,12 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # 1. التوقيت المصري الصارم (القاهرة)
 MY_TZ = pytz.timezone('Africa/Cairo')
 
-# 2. قائمة الـ 13 جروب المعتمدة (الأساس + الـ ID الجديد)
+# 2. قائمة الـ 13 جروب المعتمدة
 GROUP_IDS = [
     -1003870414631, -1003868568456, -1003843038200, -1003842260078,
     -1003773422592, -1003309198838, -1003544491812, -1003715228581,
     -1003304815564, -1003835237780, -1003851844806, -1003863374316,
-    -1003843038200  # الـ ID الجديد الذي تم تثبيته
+    -1003843038200
 ]
 
 TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
@@ -31,12 +31,17 @@ async def apply_status(bot, chat_id, action):
             can_send_other_messages=False, can_add_web_page_previews=False,
             can_send_polls=False, can_send_voice_notes=False, can_send_audios=False
         )
+        # السطر المضاف فقط:
+        alert_msg = "تنبيه عسكري 🪖:\n\"الجروبات مفتوحة الان\""
     else:
         perms = ChatPermissions(can_send_messages=False)
+        # السطر المضاف فقط:
+        alert_msg = "تنبيه عسكري 🪖:\n\"مقفولة تماماً الآن\""
     
     try:
-        # تحويل الـ ID لرقم صحيح لضمان القبول الفوري من تليجرام
         await bot.set_chat_permissions(chat_id=int(chat_id), permissions=perms)
+        # السطر المضاف فقط لإرسال الرسالة:
+        await bot.send_message(chat_id=int(chat_id), text=alert_msg)
         logging.info(f"✅ ACTION SUCCESS: {action} on {chat_id}")
         return True
     except Exception as e:
@@ -46,79 +51,57 @@ async def apply_status(bot, chat_id, action):
 # ---------------- المحرك الذكي للمواعيد (Job Trigger) ----------------
 
 async def job_trigger(context: ContextTypes.DEFAULT_TYPE):
-    """المحرك المسؤول عن تنفيذ المواعيد المجدولة"""
     chat_id, action, is_fixed = context.job.data
-    
-    # فلتر الإجازة (للمواعيد الثابتة فقط): الثلاثاء والجمعة
     if is_fixed:
         now_egypt = datetime.now(MY_TZ)
-        if now_egypt.weekday() in [1, 4]: # 1 = الثلاثاء، 4 = الجمعة
+        if now_egypt.weekday() in [1, 4]: 
             logging.info(f"⏸️ Holiday Skip (Fixed Schedule): {chat_id}")
             return
-            
     await apply_status(context.bot, chat_id, action)
 
 # ---------------- أوامر التحكم (أدمن فقط) ----------------
 
 async def is_admin(update: Update):
-    """التحقق من أن المستخدم أدمن في الجروب"""
     try:
         user = await update.effective_chat.get_member(update.effective_user.id)
         return user.status in ['administrator', 'creator']
     except: return False
 
 async def addtime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إضافة فترة استثنائية (تكسر أي حالة سابقة وتفتح فوراً لو الموعد حان)"""
     if not await is_admin(update): return
     if len(context.args) < 2:
         await update.message.reply_text("⚠️ المثال: /addtime 05:30 06:00")
         return
-    
     try:
         now_eg = datetime.now(MY_TZ)
         h1, m1 = map(int, context.args[0].split(':'))
         h2, m2 = map(int, context.args[1].split(':'))
-        
-        # تحويل الوقت لـ datetime كاملة للمقارنة الدقيقة بالثانية
         t_open_dt = now_eg.replace(hour=h1, minute=m1, second=0, microsecond=0)
         t_close_dt = now_eg.replace(hour=h2, minute=m2, second=0, microsecond=0)
-
-        # تحصين الأوامر اللحظية: لو الميعاد حان فعلاً أو فات بثوانٍ، افتح فوراً
         if t_open_dt <= now_eg:
             await apply_status(context.bot, update.effective_chat.id, "open")
             msg = "🔓 الميعاد حان فعلاً: تم كسر القفل والفتح فوراً."
         else:
             context.job_queue.run_once(job_trigger, when=t_open_dt, data=(update.effective_chat.id, "open", False))
             msg = f"✅ ميعاد الفتح القادم: {context.args[0]}"
-
-        # جدولة القفل دائماً (الـ addtime تتجاهل فلتر الإجازة)
         context.job_queue.run_once(job_trigger, when=t_close_dt, data=(update.effective_chat.id, "close", False))
         await update.message.reply_text(f"{msg}\n🔒 ميعاد القفل المجدول: {context.args[1]}")
-        
     except Exception as e:
         await update.message.reply_text(f"❌ خطأ فني: {e}")
 
 async def open_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """فتح الجروب فوراً في أي وقت"""
     if not await is_admin(update): return
     await apply_status(context.bot, update.effective_chat.id, "open")
-    await update.message.reply_text("🔓 تم الفتح اليدوي الفوري.")
 
 async def close_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """قفل الجروب فوراً في أي وقت"""
     if not await is_admin(update): return
     await apply_status(context.bot, update.effective_chat.id, "close")
-    await update.message.reply_text("🔒 تم القفل اليدوي الفوري.")
 
 # ---------------- تشغيل السيستم المركزي ----------------
 
 def main():
-    # بناء التطبيق وربطه بالتوجن
     app = ApplicationBuilder().token(TOKEN).build()
     jq = app.job_queue
-
-    # برمجة الـ 13 جروب (المواعيد الثابتة الأصلية)
-    # ملاحظة: يتم تنفيذ الفلتر (الثلاثاء والجمعة) داخل دالة job_trigger
     for gid in GROUP_IDS:
         daily_schedule = [
             ((8,0), "open"), ((8,15), "close"), 
@@ -127,12 +110,9 @@ def main():
         ]
         for t, act in daily_schedule:
             jq.run_daily(job_trigger, time=time(t[0], t[1], tzinfo=MY_TZ), data=(gid, act, True))
-
-    # تسجيل الأوامر اليدوية والاستثنائية
     app.add_handler(CommandHandler("open_now", open_now))
     app.add_handler(CommandHandler("close_now", close_now))
     app.add_handler(CommandHandler("addtime", addtime))
-    
     print("🚀 نظام التحكم الشامل يعمل الآن (13 ID).. المواعيد ثابتة والتحصينات مفعلة.")
     app.run_polling()
 
