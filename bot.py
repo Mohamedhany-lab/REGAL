@@ -8,12 +8,13 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Defau
 # 1. التوقيت المصري الصارم (القاهرة)
 MY_TZ = pytz.timezone('Africa/Cairo')
 
-# 2. قائمة الـ 13 جروب المعتمدة (نفس الأرقام بالظبط)
+# 2. قائمة الـ 17 جروب المعتمدة (القديم + الـ 4 الجدد)
 GROUP_IDS = [
     -1003870414631, -1003868568456, -1003843038200, -1003842260078,
     -1003773422592, -1003309198838, -1003544491812, -1003715228581,
     -1003304815564, -1003835237780, -1003851844806, -1003863374316,
-    -1003843038200
+    -1003843038200,
+    -1003877292835, -1003747835947, -1003793666083, -1003705337445
 ]
 
 TOKEN = "8685861366:AAFKP3Nm1RG8wVx4k0aQf1KKEneCXf22ja8"
@@ -121,7 +122,7 @@ def main():
     app.add_handler(CommandHandler("close_now", close_now))
     app.add_handler(CommandHandler("addtime", addtime))
     
-    print("🚀 نظام التحكم (13 ID) يعمل بنبض القاهرة.. مانع التكرار نشط 200%.")
+    print(f"🚀 نظام التحكم ({len(GROUP_IDS)} IDs) يعمل بنبض القاهرة.. مانع التكرار نشط 200%.")
     # drop_pending_updates=True تمنع انفجار الرسايل عند إعادة التشغيل
     app.run_polling(drop_pending_updates=True)
 
