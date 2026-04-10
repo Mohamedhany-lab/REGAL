@@ -110,10 +110,10 @@ def main():
     
     jq = app.job_queue
     for gid in GROUP_IDS:
+        # تعديل المواعيد حسب طلبك الصارم (6 لـ 6:15 صباحاً) و (20 لـ 21 مساءً)
         daily_schedule = [
-            ((8,0), "open"), ((8,15), "close"), 
-            ((8,45), "open"), ((9,0), "close"), 
-            ((21,0), "open"), ((22,0), "close")
+            ((6,0), "open"), ((6,15), "close"), 
+            ((20,0), "open"), ((21,0), "close")
         ]
         for t, act in daily_schedule:
             jq.run_daily(job_trigger, time=time(t[0], t[1], tzinfo=MY_TZ), data=(gid, act, True))
